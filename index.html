@@ -264,7 +264,7 @@
 
   function initStableUrlHint() {
     var base = location.href.replace(/[^/]*$/, '');
-    var stableUrl = base + 'json';
+    var stableUrl = base + 'bollettino.json';
     var codeEl = document.getElementById('stable-json-url');
     codeEl.textContent = stableUrl;
     document.getElementById('btn-copy-stable-url').addEventListener('click', function () {
