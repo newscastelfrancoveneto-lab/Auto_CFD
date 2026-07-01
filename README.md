@@ -13,8 +13,19 @@ Sostituisci `<utente>` e `<repo>` con i valori reali del deploy.
 | Endpoint | Contenuto |
 |---|---|
 | `https://<utente>.github.io/<repo>/data/bollettino.json` | Bollettino corrente, bytes identici a quelli pubblicati dalla Regione |
+| `https://<utente>.github.io/<repo>/json` | Alias stabile e "friendly" dello stesso bollettino corrente, pensato per l'integrazione con servizi terzi |
 | `https://<utente>.github.io/<repo>/data/meta.json` | Metadati: URL sorgente, nome file, timestamp di fetch, numero bollettino/revisione |
 | `https://<utente>.github.io/<repo>/data/archive/<nomefile>.json` | Copie storiche, una per ogni numero+revisione mai pubblicati |
+
+`https://<utente>.github.io/<repo>/json` è un file senza estensione, aggiornato
+dallo stesso step dello script che scrive `data/bollettino.json` (stesso
+contenuto, stessi bytes). Esiste per dare ai servizi terzi un URL corto e
+stabile da salvare in configurazione, senza dover conoscere la struttura
+interna `data/`. Nota: essendo privo di estensione, GitHub Pages può servirlo
+con `Content-Type: application/octet-stream` invece di `application/json` —
+per un client che fa `fetch(url).then(r => r.json())` non cambia nulla, ma se
+il servizio terzo valida rigidamente l'header Content-Type conviene puntare a
+`data/bollettino.json`.
 
 `meta.json`:
 
