@@ -27,7 +27,7 @@ DATA_DIR = os.path.join(REPO_ROOT, "data")
 ARCHIVE_DIR = os.path.join(DATA_DIR, "archive")
 BOLLETTINO_PATH = os.path.join(DATA_DIR, "bollettino.json")
 META_PATH = os.path.join(DATA_DIR, "meta.json")
-JSON_ALIAS_PATH = os.path.join(REPO_ROOT, "json")
+JSON_ALIAS_PATH = os.path.join(REPO_ROOT, "bollettino.json")
 
 HREF_RE = re.compile(r'href=["\']([^"\']*BLMultiCfd[^"\']*\.json[^"\']*)["\']', re.IGNORECASE)
 FILENAME_RE = re.compile(r'(BLMultiCfd[^/"\']*\.json)', re.IGNORECASE)
