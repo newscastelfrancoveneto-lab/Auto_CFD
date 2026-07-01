@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bollettino CFD Veneto — Mirror</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1216;
+    --panel: #161b22;
+    --border: #2a323d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --ok: #3fb950;
+    --err: #f85149;
+    --key: #79c0ff;
+    --str: #a5d6ff;
+    --num: #f2cc60;
+    --null: #ff7b72;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  header h1 {
+    margin: 0 0 0.75rem 0;
+    font-size: 1.15rem;
+    font-weight: 600;
+  }
+  .status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.5rem 1.5rem;
+    font-size: 0.85rem;
+  }
+  .status-grid dt {
+    color: var(--muted);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin: 0;
+  }
+  .status-grid dd {
+    margin: 0.15rem 0 0 0;
+    font-variant-numeric: tabular-nums;
+    word-break: break-word;
+  }
+  .status-grid a { color: var(--accent); }
+  main {
+    padding: 1.5rem;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  .banner {
+    padding: 1rem 1.25rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+  }
+  .banner.loading {
+    background: rgba(88, 166, 255, 0.1);
+    border: 1px solid rgba(88, 166, 255, 0.35);
+    color: var(--accent);
+  }
+  .banner.error {
+    background: rgba(248, 81, 73, 0.1);
+    border: 1px solid rgba(248, 81, 73, 0.4);
+    color: var(--err);
+  }
+  .toolbar {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+  }
+  button {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.45rem 0.9rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button:active { transform: translateY(1px); }
+  pre#json-view {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    overflow-x: auto;
+    font-size: 0.8rem;
+    max-height: 70vh;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .tok-key { color: var(--key); }
+  .tok-str { color: var(--str); }
+  .tok-num { color: var(--num); }
+  .tok-null { color: var(--null); }
+  .tok-bool { color: var(--num); }
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.75rem;
+    padding: 1.5rem;
+  }
+  @media (max-width: 640px) {
+    main { padding: 1rem; }
+    header { padding: 1rem; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Bollettino CFD Veneto — mirror</h1>
+  <dl class="status-grid" id="status-grid">
+    <div><dt>Stato</dt><dd id="s-stato">caricamento…</dd></div>
+    <div><dt>Bollettino</dt><dd id="s-num">—</dd></div>
+    <div><dt>Compilazione</dt><dd id="s-compilazione">—</dd></div>
+    <div><dt>Ultimo fetch</dt><dd id="s-fetched">—</dd></div>
+    <div><dt>Fonte originale</dt><dd id="s-source">—</dd></div>
+  </dl>
+</header>
+<main>
+  <div id="banner"></div>
+  <div class="toolbar">
+    <button id="btn-copy">Copia JSON</button>
+    <button id="btn-download">Scarica</button>
+    <button id="btn-reload">Ricarica</button>
+  </div>
+  <pre id="json-view"></pre>
+</main>
+<footer>
+  Mirror non ufficiale del bollettino di criticità della Regione del Veneto. Dati pubblicati da
+  <a href="https://www.regione.veneto.it/web/protezione-civile/protezione-civile" style="color: var(--accent);">Regione Veneto — Protezione Civile</a>.
+</footer>
+<script>
+(function () {
+  var state = { meta: null, bollettino: null };
+
+  function setBanner(kind, html) {
+    var el = document.getElementById('banner');
+    if (!kind) { el.innerHTML = ''; return; }
+    el.innerHTML = '<div class="banner ' + kind + '">' + html + '</div>';
+  }
+
+  function fmtItalianTime(iso) {
+    if (!iso) return '—';
+    try {
+      var d = new Date(iso);
+      return d.toLocaleString('it-IT', { timeZone: 'Europe/Rome', dateStyle: 'medium', timeStyle: 'medium' });
+    } catch (e) {
+      return iso;
+    }
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
+    });
+  }
+
+  function highlightJson(jsonString) {
+    var escaped = escapeHtml(jsonString);
+    return escaped.replace(
+      /("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false)\b|\bnull\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+      function (match) {
+        if (/^"/.test(match)) {
+          return /:$/.test(match)
+            ? '<span class="tok-key">' + match + '</span>'
+            : '<span class="tok-str">' + match + '</span>';
+        }
+        if (/^(true|false)$/.test(match)) return '<span class="tok-bool">' + match + '</span>';
+        if (match === 'null') return '<span class="tok-null">' + match + '</span>';
+        return '<span class="tok-num">' + match + '</span>';
+      }
+    );
+  }
+
+  function render() {
+    var meta = state.meta;
+    var boll = state.bollettino;
+
+    document.getElementById('s-stato').textContent = 'ok';
+    document.getElementById('s-num').textContent = meta
+      ? (meta.num_boll || '—') + (meta.aggiornamento != null ? ' (rev. ' + meta.aggiornamento + ')' : '')
+      : '—';
+    document.getElementById('s-compilazione').textContent = meta
+      ? [meta.data_compilazione, meta.ora_compilazione].filter(Boolean).join(' ') || '—'
+      : '—';
+    document.getElementById('s-fetched').textContent = meta ? fmtItalianTime(meta.fetched_at) : '—';
+
+    var sourceEl = document.getElementById('s-source');
+    sourceEl.innerHTML = '';
+    if (meta && meta.source_url) {
+      var a = document.createElement('a');
+      a.href = meta.source_url;
+      a.textContent = 'link';
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      sourceEl.appendChild(a);
+    } else {
+      sourceEl.textContent = '—';
+    }
+
+    document.getElementById('json-view').innerHTML = boll
+      ? highlightJson(JSON.stringify(boll, null, 2))
+      : '';
+  }
+
+  function fetchJson(path) {
+    var url = path + '?t=' + Date.now();
+    return fetch(url, { cache: 'no-store' }).then(function (res) {
+      if (!res.ok) throw new Error(path + ': HTTP ' + res.status);
+      return res.json();
+    });
+  }
+
+  function load() {
+    setBanner('loading', 'Caricamento bollettino…');
+    document.getElementById('s-stato').textContent = 'caricamento…';
+
+    Promise.all([fetchJson('data/meta.json'), fetchJson('data/bollettino.json')])
+      .then(function (results) {
+        state.meta = results[0];
+        state.bollettino = results[1];
+        setBanner(null);
+        render();
+      })
+      .catch(function (err) {
+        document.getElementById('s-stato').textContent = 'errore';
+        setBanner('error',
+          'Impossibile caricare il bollettino (nessun dato pubblicato finora, oppure errore di rete): ' +
+          escapeHtml(err.message));
+      });
+  }
+
+  document.getElementById('btn-reload').addEventListener('click', load);
+
+  document.getElementById('btn-copy').addEventListener('click', function () {
+    if (!state.bollettino) return;
+    navigator.clipboard.writeText(JSON.stringify(state.bollettino, null, 2));
+  });
+
+  document.getElementById('btn-download').addEventListener('click', function () {
+    if (!state.bollettino) return;
+    var filename = (state.meta && state.meta.filename) || 'bollettino.json';
+    var blob = new Blob([JSON.stringify(state.bollettino, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>
