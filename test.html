@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bollettino CFD Veneto — Tester matrice</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1216;
+    --panel: #161b22;
+    --border: #2a323d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --err: #f85149;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  header h1 {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 600;
+  }
+  main {
+    padding: 1.5rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .banner {
+    padding: 1rem 1.25rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+  }
+  .banner.loading {
+    background: rgba(88, 166, 255, 0.1);
+    border: 1px solid rgba(88, 166, 255, 0.35);
+    color: var(--accent);
+  }
+  .banner.error {
+    background: rgba(248, 81, 73, 0.1);
+    border: 1px solid rgba(248, 81, 73, 0.4);
+    color: var(--err);
+  }
+  .generali {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.5rem;
+    padding: 0.75rem 1rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    font-size: 0.85rem;
+  }
+  .generali span b {
+    color: var(--muted);
+    font-weight: 600;
+    margin-right: 0.3rem;
+  }
+  section { margin-bottom: 2rem; }
+  section h2 {
+    font-size: 1rem;
+    margin: 0 0 0.75rem 0;
+    color: var(--accent);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.8rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 0.4rem 0.6rem;
+    text-align: center;
+  }
+  th {
+    background: rgba(88, 166, 255, 0.08);
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  td.zone-cell {
+    text-align: left;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .dot {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+  .no-data { color: var(--muted); }
+  .notes-grid {
+    display: grid;
+    gap: 1rem;
+  }
+  .note-block {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.9rem 1.1rem;
+  }
+  .note-block h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.85rem;
+    color: var(--accent);
+  }
+  .note-block .body {
+    font-size: 0.85rem;
+    white-space: pre-wrap;
+  }
+  .note-block .body :is(p, div) { margin: 0 0 0.5rem 0; }
+  .note-block .body a { color: var(--accent); }
+  .note-block .empty { color: var(--muted); font-style: italic; }
+  .sub-notes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.5rem;
+    font-size: 0.8rem;
+  }
+  .sub-notes div { color: var(--muted); }
+  .sub-notes b { color: var(--text); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Bollettino CFD Veneto — pagina di test (matrice zona × rischio)</h1>
+</header>
+<main>
+  <div id="banner"></div>
+  <div id="content" style="display:none;">
+    <div class="generali" id="generali"></div>
+
+    <section>
+      <h2>Oggi</h2>
+      <div id="table-oggi"></div>
+    </section>
+
+    <section>
+      <h2>Domani</h2>
+      <div id="table-domani"></div>
+    </section>
+
+    <section>
+      <h2>Note</h2>
+      <div class="notes-grid" id="notes"></div>
+    </section>
+  </div>
+</main>
+<script>
+(function () {
+  var RISCHI = ["IDRAULICO", "IDROGEOLOGICO", "IDROGEOLOGICO TEMPORALI", "VENTO", "ONDATE DI CALORE"];
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
+    });
+  }
+
+  function setBanner(kind, html) {
+    var el = document.getElementById('banner');
+    if (!kind) { el.innerHTML = ''; return; }
+    el.innerHTML = '<div class="banner ' + kind + '">' + html + '</div>';
+  }
+
+  function renderGenerali(dg) {
+    dg = dg || {};
+    var items = [
+      ['Bollettino', (dg.num_boll || '—') + (dg.aggiornamento != null ? ' (agg. ' + dg.aggiornamento + ')' : '')],
+      ['Intestazione', dg.intestazione || '—'],
+      ['Compilazione', [dg.data_compilazione, dg.ora_compilazione].filter(Boolean).join(' ') || '—'],
+      ['Oggi', [dg.data_oggi, [dg.ora_i_oggi, dg.ora_f_oggi].filter(Boolean).join('–')].filter(Boolean).join(' ') || '—'],
+      ['Domani', [dg.data_domani, [dg.ora_i_domani, dg.ora_f_domani].filter(Boolean).join('–')].filter(Boolean).join(' ') || '—']
+    ];
+    document.getElementById('generali').innerHTML = items.map(function (pair) {
+      return '<span><b>' + escapeHtml(pair[0]) + ':</b>' + escapeHtml(pair[1]) + '</span>';
+    }).join('');
+  }
+
+  function renderTable(zones) {
+    if (!Array.isArray(zones) || zones.length === 0) {
+      return '<p class="no-data">Nessun dato disponibile.</p>';
+    }
+    var html = '<table><thead><tr><th>Zona</th>';
+    RISCHI.forEach(function (r) { html += '<th>' + escapeHtml(r) + '</th>'; });
+    html += '</tr></thead><tbody>';
+
+    zones.forEach(function (zone) {
+      html += '<tr><td class="zone-cell">' + escapeHtml(zone.area) + '</td>';
+      RISCHI.forEach(function (riskName) {
+        var entry = (zone.rischi || []).find(function (r) { return r.rischio === riskName; });
+        if (entry) {
+          var title = riskName + ': ' + entry.liv_descrizione + ' (livello ' + entry.livello + ')';
+          html += '<td><span class="dot" style="background:' + escapeHtml(entry.liv_col) + '" title="' + escapeHtml(title) + '"></span></td>';
+        } else {
+          html += '<td><span class="no-data" title="Rischio non applicabile a questa zona">—</span></td>';
+        }
+      });
+      html += '</tr>';
+    });
+
+    html += '</tbody></table>';
+    return html;
+  }
+
+  function noteBlock(title, value) {
+    var body = (value === null || value === undefined || value === '')
+      ? '<span class="empty">Nessuna nota</span>'
+      : '<div class="body">' + value + '</div>';
+    return '<div class="note-block"><h3>' + escapeHtml(title) + '</h3>' + body + '</div>';
+  }
+
+  function renderNotes(note) {
+    note = note || {};
+    var html = '';
+    html += noteBlock('Fenomeni previsti', note.fenomeni_previsti ? escapeHtml(note.fenomeni_previsti) : null);
+    html += noteBlock('Allerta prevista', note.allerta_prevista ? escapeHtml(note.allerta_prevista) : null);
+    html += noteBlock('Tendenza', note.tendenza ? escapeHtml(note.tendenza) : null);
+    // note_e_contatti arriva già come HTML formattato dalla Regione: va renderizzato, non escapato.
+    html += noteBlock('Note e contatti', note.note_e_contatti || null);
+
+    var subFields = [
+      ['nota_idraulico', 'Idraulico'],
+      ['nota_idrogeologico', 'Idrogeologico'],
+      ['nota_idrogeologico_temp', 'Idrogeologico temporali'],
+      ['nota_vento', 'Vento'],
+      ['nota_neve', 'Neve'],
+      ['nota_gelo', 'Gelo'],
+      ['nota_valanghe', 'Valanghe']
+    ];
+    var subHtml = subFields.map(function (pair) {
+      var val = note[pair[0]];
+      return '<div><b>' + escapeHtml(pair[1]) + ':</b> ' + (val ? escapeHtml(val) : '—') + '</div>';
+    }).join('');
+    html += '<div class="note-block"><h3>Note per rischio</h3><div class="sub-notes">' + subHtml + '</div></div>';
+
+    document.getElementById('notes').innerHTML = html;
+  }
+
+  function load() {
+    setBanner('loading', 'Caricamento bollettino…');
+    fetch('data/bollettino.json?t=' + Date.now(), { cache: 'no-store' })
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
+      .then(function (data) {
+        setBanner(null);
+        document.getElementById('content').style.display = '';
+        renderGenerali(data.dati_generali);
+        document.getElementById('table-oggi').innerHTML = renderTable(data.zone && data.zone.oggi);
+        document.getElementById('table-domani').innerHTML = renderTable(data.zone && data.zone.domani);
+        renderNotes(data.note);
+      })
+      .catch(function (err) {
+        setBanner('error', 'Impossibile caricare il bollettino: ' + escapeHtml(err.message));
+      });
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>
